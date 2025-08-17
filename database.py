@@ -398,6 +398,79 @@ class Database:
         conn.close()
         return True
     
+    async def update_player_starter_status(self, user_id: int, player_id: int, is_starter: bool) -> bool:
+        """Atualiza o status de titular/reserva de um jogador"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        try:
+            # Se está definindo como titular, verifica se já tem 5 titulares
+            if is_starter:
+                cursor.execute('''
+                    SELECT COUNT(*) FROM user_players 
+                    WHERE user_id = ? AND is_starter = 1
+                ''', (user_id,))
+                current_starters = cursor.fetchone()[0]
+                
+                if current_starters >= 5:
+                    conn.close()
+                    return False
+            
+            # Atualiza o status
+            cursor.execute('''
+                UPDATE user_players 
+                SET is_starter = ? 
+                WHERE user_id = ? AND player_id = ?
+            ''', (is_starter, user_id, player_id))
+            
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            print(f"Erro ao atualizar status do jogador: {e}")
+            conn.close()
+            return False
+    
+    async def sell_player(self, user_id: int, player_id: int) -> Optional[int]:
+        """Vende um jogador e retorna o valor da venda"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        try:
+            # Obtém informações do jogador
+            cursor.execute('''
+                SELECT p.market_value FROM user_players up
+                JOIN players p ON up.player_id = p.player_id
+                WHERE up.user_id = ? AND up.player_id = ?
+            ''', (user_id, player_id))
+            
+            result = cursor.fetchone()
+            if not result:
+                conn.close()
+                return None
+            
+            market_value = result[0]
+            sell_value = int(market_value * 0.8)  # 80% do valor de mercado
+            
+            # Remove o jogador do usuário
+            cursor.execute('''
+                DELETE FROM user_players 
+                WHERE user_id = ? AND player_id = ?
+            ''', (user_id, player_id))
+            
+            # Adiciona o dinheiro da venda
+            cursor.execute('''
+                UPDATE users SET money = money + ? WHERE user_id = ?
+            ''', (sell_value, user_id))
+            
+            conn.commit()
+            conn.close()
+            return sell_value
+        except Exception as e:
+            print(f"Erro ao vender jogador: {e}")
+            conn.close()
+            return None
+    
     async def update_last_free_pack(self, user_id: int) -> bool:
         """Atualiza o timestamp do último pack gratuito"""
         conn = sqlite3.connect(self.db_path)

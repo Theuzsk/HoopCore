@@ -19,51 +19,41 @@ class GeneralCog(commands.Cog):
         await interaction.response.defer()
         
         embed = EmbedBuilder.create_embed(
-            f"{EMOJIS['basketball']} HoopCore - Comandos",
-            "Lista completa de todos os comandos disponíveis",
+            "🏀 HoopCore - Comandos",
+            "Lista completa de todos os comandos disponíveis:",
             COLORS['primary']
         )
         
-        # Comandos de Time
         embed.add_field(
-            name="🏀 Comandos de Time",
+            name="🏗️ Times",
             value="• `/criartime` - Cria um novo time\n"
                   "• `/time` - Mostra informações do seu time\n"
-                  "• `/jogadores` - Lista todos os seus jogadores\n"
-                  "• `/titular` - Define jogador como titular\n"
-                  "• `/reserva` - Define jogador como reserva\n"
+                  "• `/jogadores` - Lista seus jogadores",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="💰 Economia",
+            value="• `/loja` - Mostra jogadores disponíveis\n"
+                  "• `/pack` - Ganha um jogador aleatório\n"
+                  "• `/packpremium` - Pack premium (mais raros)\n"
+                  "• `/diario` - Coleta recompensa diária\n"
                   "• `/vender` - Vende um jogador",
             inline=False
         )
         
-        # Comandos de Loja
         embed.add_field(
-            name="🛒 Comandos de Loja",
-            value="• `/loja` - Mostra a loja de jogadores\n"
-                  "• `/comprar` - Compra um jogador da loja\n"
-                  "• `/pack` - Abre pack gratuito (25min cooldown)\n"
-                  "• `/packpremium` - Compra pack premium ($5,000)\n"
-                  "• `/diario` - Coleta recompensa diária\n"
-                  "• `/dinheiro` - Mostra seu dinheiro",
-            inline=False
-        )
-        
-        # Comandos de Partida
-        embed.add_field(
-            name="🎮 Comandos de Partida",
+            name="⚔️ Competição",
             value="• `/desafiar` - Desafia outro jogador\n"
                   "• `/partida` - Inicia partida simulada\n"
-                  "• `/ranking` - Mostra rankings\n"
-                  "• `/estatisticas` - Suas estatísticas\n"
-                  "• `/historico` - Histórico de partidas",
+                  "• `/ranking` - Mostra rankings do servidor",
             inline=False
         )
         
-        # Comandos Gerais
         embed.add_field(
-            name="⚙️ Comandos Gerais",
-            value="• `/ajuda` - Mostra esta lista\n"
-                  "• `/status` - Status do bot\n"
+            name="⚙️ Utilitários",
+            value="• `/estatisticas` - Suas estatísticas\n"
+                  "• `/ping` - Testa latência do bot\n"
                   "• `/idioma` - Troca idioma do bot",
             inline=False
         )
@@ -77,12 +67,12 @@ class GeneralCog(commands.Cog):
             inline=False
         )
         
-        embed.set_footer(text="HoopCore - RPG de Basquete da NBA 2025")
+        embed.set_footer(text="HoopCore - Jogo de Basquete da NBA 2025 | Criado por Theus.zk")
         
         await interaction.followup.send(embed=embed)
     
     @app_commands.command(name="status", description="Mostra status do bot")
-    async def bot_status(self, interaction: discord.Interaction):
+    async def status_command(self, interaction: discord.Interaction):
         """Mostra status do bot"""
         await interaction.response.defer()
         
@@ -180,32 +170,32 @@ class GeneralCog(commands.Cog):
         await interaction.followup.send(embed=embed)
     
     @app_commands.command(name="info", description="Informações sobre o bot")
-    async def bot_info(self, interaction: discord.Interaction):
+    async def info_command(self, interaction: discord.Interaction):
         """Mostra informações sobre o bot"""
         await interaction.response.defer()
         
         embed = EmbedBuilder.create_embed(
-            f"{EMOJIS['basketball']} Sobre o HoopCore",
-            "Um RPG de basquete inspirado na NBA 2025",
-            COLORS['purple']
+            "🏀 Sobre o HoopCore",
+            "Um jogo de basquete inspirado na NBA 2025",
+            COLORS['primary']
         )
         
         embed.add_field(
             name="🎯 Sobre",
-            value="HoopCore é um bot de RPG de basquete que permite você:\n"
+            value="HoopCore é um bot de jogo de basquete que permite você:\n"
                   "• Criar e gerenciar seu próprio time\n"
-                  "• Colecionar jogadores reais da NBA 2025\n"
-                  "• Competir contra outros jogadores\n"
-                  "• Construir a melhor equipe possível",
+                  "• Colecionar jogadores da NBA 2025\n"
+                  "• Competir em partidas emocionantes\n"
+                  "• Construir o melhor time da liga",
             inline=False
         )
         
         embed.add_field(
-            name="🏀 Jogadores",
+            name="🏆 Jogadores",
             value="• **Lendários:** LeBron James, Stephen Curry, Giannis, etc.\n"
                   "• **Épicos:** Ja Morant, Zion Williamson, Anthony Edwards\n"
-                  "• **Raros:** Bam Adebayo, De'Aaron Fox, Donovan Mitchell\n"
-                  "• **Comuns:** Jogadores de role player",
+                  "• **Raros:** Jogadores com overall 80-89\n"
+                  "• **Comuns:** Jogadores com overall 70-79",
             inline=False
         )
         
@@ -213,17 +203,23 @@ class GeneralCog(commands.Cog):
             name="💰 Economia",
             value="• **Recompensa Diária:** $1,000\n"
                   "• **Vitória em Partida:** +$500\n"
-                  "• **Derrota em Partida:** -$200\n"
-                  "• **Pack Premium:** $5,000 (3 jogadores)",
+                  "• **Pack Premium:** $5,000\n"
+                  "• **Dinheiro Inicial:** $10,000",
             inline=False
         )
         
         embed.add_field(
-            name="📈 Progressão",
-            value="• Colete jogadores através de packs\n"
-                  "• Monte o melhor time possível\n"
-                  "• Compita contra outros jogadores\n"
-                  "• Suba nos rankings globais",
+            name="⚙️ Sistema",
+            value="• **5 Titulares** + Reservas\n"
+                  "• **Posições:** PG, SG, SF, PF, C\n"
+                  "• **Overall:** Baseado na média dos titulares\n"
+                  "• **Rankings:** Por vitórias, dinheiro e overall",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="👨‍💻 Desenvolvedor",
+            value="**Theus.zk** - Criador e desenvolvedor do HoopCore",
             inline=False
         )
         
@@ -315,6 +311,67 @@ class GeneralCog(commands.Cog):
         )
         
         await interaction.followup.send(embed=embed)
+
+    @app_commands.command(name="admin", description="Comandos administrativos (apenas para o dono)")
+    async def admin_command(self, interaction: discord.Interaction):
+        """Comandos administrativos para o dono do bot"""
+        # Verifica se é o dono do bot - SUBSTITUA PELO SEU ID REAL
+        OWNER_ID = 960343374727114752  # ✅ ID do Theus.zk
+        
+        if interaction.user.id != OWNER_ID:
+            embed = EmbedBuilder.create_embed(
+                "❌ Acesso Negado",
+                "Apenas o dono do bot pode usar este comando.",
+                COLORS['error']
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+        
+        await interaction.response.defer()
+        
+        # Cria embed com opções administrativas
+        embed = EmbedBuilder.create_embed(
+            "⚙️ Painel Administrativo",
+            "Selecione uma ação administrativa:",
+            COLORS['primary']
+        )
+        
+        # Cria botões para ações administrativas
+        view = discord.ui.View()
+        
+        # Adicionar dinheiro
+        view.add_item(discord.ui.Button(
+            style=discord.ButtonStyle.green,
+            label="💰 Adicionar Dinheiro",
+            emoji="💵",
+            custom_id="admin_add_money"
+        ))
+        
+        # Adicionar jogador
+        view.add_item(discord.ui.Button(
+            style=discord.ButtonStyle.blue,
+            label="🏀 Adicionar Jogador",
+            emoji="👤",
+            custom_id="admin_add_player"
+        ))
+        
+        # Resetar cooldowns
+        view.add_item(discord.ui.Button(
+            style=discord.ButtonStyle.yellow,
+            label="⏰ Resetar Cooldowns",
+            emoji="🔄",
+            custom_id="admin_reset_cooldowns"
+        ))
+        
+        # Ver estatísticas do servidor
+        view.add_item(discord.ui.Button(
+            style=discord.ButtonStyle.secondary,
+            label="📊 Estatísticas do Servidor",
+            emoji="📈",
+            custom_id="admin_server_stats"
+        ))
+        
+        await interaction.followup.send(embed=embed, view=view)
 
 async def setup(bot):
     await bot.add_cog(GeneralCog(bot))

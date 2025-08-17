@@ -7,6 +7,7 @@ from datetime import datetime
 from database import Database
 from utils import EmbedBuilder, ButtonBuilder, GameLogic
 from config import COLORS, EMOJIS, ECONOMY, MATCH_SETTINGS
+import random
 
 class MatchesCog(commands.Cog):
     def __init__(self, bot):
@@ -113,91 +114,306 @@ class MatchesCog(commands.Cog):
         )
     
     @app_commands.command(name="partida", description="Inicia uma partida simulada")
-    @app_commands.describe(jogador="Mencione o jogador para jogar contra")
-    async def start_match(self, interaction: discord.Interaction, jogador: discord.Member):
+    async def start_match(self, interaction: discord.Interaction):
         """Inicia uma partida simulada"""
         await interaction.response.defer()
         
-        player1_id = interaction.user.id
-        player2_id = jogador.id
+        user_id = interaction.user.id
         
-        # Verifica se ambos têm times
-        team1 = await self.db.get_team(player1_id)
-        team2 = await self.db.get_team(player2_id)
-        
-        if not team1 or not team2:
+        # Verifica se tem time
+        team = await self.db.get_team(user_id)
+        if not team:
             embed = EmbedBuilder.create_embed(
-                "❌ Times Necessários",
-                "Ambos os jogadores precisam ter times criados!",
+                "❌ Sem Time",
+                "Você precisa criar um time primeiro!",
                 COLORS['error']
             )
             await interaction.followup.send(embed=embed)
             return
         
-        # Obtém jogadores titulares
-        players1 = await self.db.get_user_players(player1_id)
-        players2 = await self.db.get_user_players(player2_id)
+        # Verifica se tem 5 titulares
+        players = await self.db.get_user_players(user_id)
+        starters = [p for p in players if p['is_starter']]
         
-        starters1 = [p for p in players1 if p['is_starter']][:5]
-        starters2 = [p for p in players2 if p['is_starter']][:5]
-        
-        if len(starters1) < 5 or len(starters2) < 5:
+        if len(starters) < 5:
             embed = EmbedBuilder.create_embed(
-                "❌ Times Incompletos",
-                "Ambos os times precisam ter 5 titulares!",
-                COLORS['error']
+                "⚠️ Time Incompleto",
+                f"Você precisa de 5 titulares para jogar. Atualmente tem {len(starters)}.",
+                COLORS['warning']
             )
             await interaction.followup.send(embed=embed)
             return
         
-        # Simula a partida
-        score1, score2 = GameLogic.simulate_match(starters1, starters2)
+        # Inicia a partida
+        await self.start_interactive_match(interaction, team, starters)
+    
+    async def start_interactive_match(self, interaction, team, starters):
+        """Inicia partida interativa"""
+        # Calcula overall do time
+        team_overall = sum(p['overall'] for p in starters) / len(starters)
         
-        # Determina o vencedor
-        if score1 > score2:
-            winner_id = player1_id
-            winner_name = interaction.user.display_name
-            loser_id = player2_id
-            loser_name = jogador.display_name
+        # Cria embed inicial da partida
+        embed = discord.Embed(
+            title="🏀 Partida Iniciada!",
+            description=f"**{team['team_name']}** vs **CPU**\n\n"
+                       f"Overall do Time: **{team_overall:.1f}**\n"
+                       f"Quartos: 4 x 12 minutos\n\n"
+                       f"Clique em **Iniciar** para começar!",
+            color=0x00ff00
+        )
+        
+        # Botão para iniciar
+        view = discord.ui.View()
+        view.add_item(discord.ui.Button(
+            style=discord.ButtonStyle.green,
+            label="🚀 Iniciar Partida",
+            emoji="🏀",
+            custom_id="start_match"
+        ))
+        
+        await interaction.followup.send(embed=embed, view=view)
+    
+    async def handle_match_situation(self, interaction, quarter, time, score_player, score_cpu):
+        """Lida com situação da partida"""
+        # Situações variadas baseadas no momento da partida
+        situations = [
+            {
+                "name": "🏀 Ataque Rápido",
+                "description": "Seu time tem uma chance de contra-ataque!",
+                "options": [
+                    {"label": "⚡ Correr para a cesta", "custom_id": "fast_break_run", "success_rate": 0.7},
+                    {"label": "🎯 Passar para o ala", "custom_id": "fast_break_pass", "success_rate": 0.8},
+                    {"label": "🏃‍♂️ Drible e finalização", "custom_id": "fast_break_dribble", "success_rate": 0.6}
+                ]
+            },
+            {
+                "name": "🎯 Arremesso de 3 Pontos",
+                "description": "Chance de arremesso de longa distância!",
+                "options": [
+                    {"label": "🎯 Arremesso limpo", "custom_id": "three_clean", "success_rate": 0.4},
+                    {"label": "🏃‍♂️ Drible e arremesso", "custom_id": "three_dribble", "success_rate": 0.3},
+                    {"label": "🤝 Passar para melhor posição", "custom_id": "three_pass", "success_rate": 0.9}
+                ]
+            },
+            {
+                "name": "💪 Jogo Interior",
+                "description": "Chance de jogada próxima à cesta!",
+                "options": [
+                    {"label": "🏀 Hook shot", "custom_id": "inside_hook", "success_rate": 0.6},
+                    {"label": "💪 Post-up", "custom_id": "inside_post", "success_rate": 0.7},
+                    {"label": "🔄 Girar e finalizar", "custom_id": "inside_spin", "success_rate": 0.5}
+                ]
+            },
+            {
+                "name": "🛡️ Defesa",
+                "description": "O adversário está atacando!",
+                "options": [
+                    {"label": "🛡️ Bloqueio", "custom_id": "defense_block", "success_rate": 0.3},
+                    {"label": "🏃‍♂️ Roubar a bola", "custom_id": "defense_steal", "success_rate": 0.4},
+                    {"label": "📏 Forçar arremesso ruim", "custom_id": "defense_contest", "success_rate": 0.7}
+                ]
+            },
+            {
+                "name": "🎭 Jogada Especial",
+                "description": "Chance de uma jogada espetacular!",
+                "options": [
+                    {"label": "🔥 Alley-oop", "custom_id": "special_alley", "success_rate": 0.2},
+                    {"label": "💫 Crossover", "custom_id": "special_crossover", "success_rate": 0.4},
+                    {"label": "🚀 Tomahawk dunk", "custom_id": "special_tomahawk", "success_rate": 0.3}
+                ]
+            },
+            {
+                "name": "⏰ Final de Quarto",
+                "description": "Última chance do quarto!",
+                "options": [
+                    {"label": "🎯 Arremesso de 3", "custom_id": "quarter_three", "success_rate": 0.3},
+                    {"label": "🏃‍♂️ Penetração", "custom_id": "quarter_drive", "success_rate": 0.6},
+                    {"label": "🤝 Passar para finalização", "custom_id": "quarter_pass", "success_rate": 0.8}
+                ]
+            }
+        ]
+        
+        # Escolhe situação baseada no momento
+        if quarter == 4 and time <= 60:  # Final do jogo
+            situation = situations[5]  # Final de quarto
+        elif time <= 30:  # Final do quarto
+            situation = situations[5]  # Final de quarto
+        elif score_player > score_cpu + 10:  # Time na frente
+            situation = random.choice(situations[0:3])  # Ataque
+        elif score_cpu > score_player + 10:  # Time atrás
+            situation = random.choice(situations[0:3])  # Ataque agressivo
+        else:  # Jogo equilibrado
+            situation = random.choice(situations)
+        
+        # Cria embed da situação
+        embed = discord.Embed(
+            title=situation["name"],
+            description=f"{situation['description']}\n\n"
+                       f"**Quarto {quarter}** | **{time}s** restantes\n"
+                       f"**Placar:** {score_player} x {score_cpu}",
+            color=0x1e90ff
+        )
+        
+        # Cria botões para as opções
+        view = discord.ui.View()
+        for option in situation["options"]:
+            button = discord.ui.Button(
+                style=discord.ButtonStyle.primary,
+                label=option["label"],
+                custom_id=f"match_{option['custom_id']}_{quarter}_{time}_{score_player}_{score_cpu}",
+                emoji="🎯"
+            )
+            view.add_item(button)
+        
+        await interaction.response.edit_message(embed=embed, view=view)
+    
+    async def resolve_match_action(self, interaction, action, quarter, time, score_player, score_cpu):
+        """Resolve a ação escolhida na partida"""
+        # Mapeia ações para resultados
+        action_results = {
+            "fast_break_run": {"success": "🏃‍♂️ **Contra-ataque perfeito!** +2 pontos", "fail": "❌ Defesa interceptou o passe"},
+            "fast_break_pass": {"success": "🤝 **Passe perfeito!** +2 pontos", "fail": "❌ Passe interceptado"},
+            "fast_break_dribble": {"success": "🏀 **Drible e finalização!** +2 pontos", "fail": "❌ Bola roubada"},
+            
+            "three_clean": {"success": "🎯 **Três pontos!** +3 pontos", "fail": "❌ Arremesso errou"},
+            "three_dribble": {"success": "🏃‍♂️ **Três pontos com drible!** +3 pontos", "fail": "❌ Arremesso errou"},
+            "three_pass": {"success": "🤝 **Passe para posição melhor!** +2 pontos", "fail": "❌ Passe interceptado"},
+            
+            "inside_hook": {"success": "🏀 **Hook shot perfeito!** +2 pontos", "fail": "❌ Hook shot errou"},
+            "inside_post": {"success": "💪 **Post-up dominante!** +2 pontos", "fail": "❌ Defesa forçou erro"},
+            "inside_spin": {"success": "🔄 **Giro e finalização!** +2 pontos", "fail": "❌ Giro perdeu o equilíbrio"},
+            
+            "defense_block": {"success": "🛡️ **Bloqueio espetacular!** Bola recuperada", "fail": "❌ Bloqueio falhou, +2 pontos CPU"},
+            "defense_steal": {"success": "🏃‍♂️ **Roubo de bola!** Contra-ataque", "fail": "❌ Roubo falhou, +2 pontos CPU"},
+            "defense_contest": {"success": "📏 **Arremesso contestado!** CPU errou", "fail": "❌ Contestação falhou, +2 pontos CPU"},
+            
+            "special_alley": {"success": "🔥 **ALLEY-OOP ESPETACULAR!** +3 pontos", "fail": "❌ Alley-oop falhou"},
+            "special_crossover": {"success": "💫 **CROSSOVER PERFEITO!** +2 pontos", "fail": "❌ Crossover falhou"},
+            "special_tomahawk": {"success": "🚀 **TOMAHAWK DUNK!** +3 pontos", "fail": "❌ Dunk falhou"},
+            
+            "quarter_three": {"success": "🎯 **TRÊS PONTOS NO FINAL!** +3 pontos", "fail": "❌ Arremesso final errou"},
+            "quarter_drive": {"success": "🏃‍♂️ **Penetração perfeita!** +2 pontos", "fail": "❌ Penetração falhou"},
+            "quarter_pass": {"success": "🤝 **Passe para finalização!** +2 pontos", "fail": "❌ Passe final falhou"}
+        }
+        
+        # Obtém resultado da ação
+        action_key = action.split("_", 1)[1]  # Remove "match_" do início
+        result = action_results.get(action_key, {"success": "✅ Ação bem-sucedida!", "fail": "❌ Ação falhou"})
+        
+        # Simula dados de RPG (1-100)
+        roll = random.randint(1, 100)
+        
+        # Determina sucesso baseado na taxa de sucesso da ação
+        success_rate = 0.5  # Taxa padrão
+        for situation in self.get_match_situations():
+            for option in situation["options"]:
+                if option["custom_id"] == action_key:
+                    success_rate = option["success_rate"]
+                    break
+        
+        # Calcula sucesso (roll <= success_rate * 100)
+        is_success = roll <= (success_rate * 100)
+        
+        # Atualiza placar
+        if is_success:
+            if "pontos" in result["success"]:
+                if "+3 pontos" in result["success"]:
+                    score_player += 3
+                elif "+2 pontos" in result["success"]:
+                    score_player += 2
         else:
-            winner_id = player2_id
-            winner_name = jogador.display_name
-            loser_id = player1_id
-            loser_name = interaction.user.display_name
+            if "pontos" in result["fail"]:
+                if "+2 pontos" in result["fail"]:
+                    score_cpu += 2
+                elif "+3 pontos" in result["fail"]:
+                    score_cpu += 3
         
         # Cria embed do resultado
-        embed = EmbedBuilder.create_embed(
-            f"{EMOJIS['game']} Resultado da Partida",
-            f"**{team1['team_name']}** {score1} - {score2} **{team2['team_name']}**",
-            COLORS['primary']
+        embed = discord.Embed(
+            title="🎯 Resultado da Jogada",
+            description=f"**Dados:** {roll}/100\n"
+                       f"**Taxa de Sucesso:** {success_rate*100:.0f}%\n\n"
+                       f"**Resultado:** {result['success'] if is_success else result['fail']}\n\n"
+                       f"**Placar Atual:** {score_player} x {score_cpu}",
+            color=0x00ff00 if is_success else 0xff0000
         )
         
+        # Adiciona informações do jogo
         embed.add_field(
-            name="🏆 Vencedor",
-            value=f"**{winner_name}** ({team1['team_name'] if winner_id == player1_id else team2['team_name']})",
+            name="⏰ Tempo",
+            value=f"Quarto {quarter} | {time}s restantes",
             inline=True
         )
         
-        embed.add_field(
-            name="💰 Prêmios",
-            value=f"Ganhador: +${ECONOMY['match_win_reward']}\nPerdedor: -${ECONOMY['match_lose_penalty']}",
-            inline=True
-        )
+        # Botão para continuar
+        view = discord.ui.View()
+        view.add_item(discord.ui.Button(
+            style=discord.ButtonStyle.green,
+            label="▶️ Continuar",
+            emoji="🏀",
+            custom_id=f"continue_match_{quarter}_{time}_{score_player}_{score_cpu}"
+        ))
         
-        # Adiciona estatísticas dos times
-        overall1 = GameLogic.calculate_team_overall(starters1)
-        overall2 = GameLogic.calculate_team_overall(starters2)
-        
-        embed.add_field(
-            name="📊 Estatísticas",
-            value=f"**{team1['team_name']}:** Overall {overall1:.1f}\n**{team2['team_name']}:** Overall {overall2:.1f}",
-            inline=False
-        )
-        
-        # Atualiza estatísticas no banco de dados
-        # (implementar no database)
-        
-        await interaction.followup.send(embed=embed)
+        await interaction.response.edit_message(embed=embed, view=view)
+    
+    def get_match_situations(self):
+        """Retorna todas as situações possíveis"""
+        return [
+            {
+                "name": "🏀 Ataque Rápido",
+                "description": "Seu time tem uma chance de contra-ataque!",
+                "options": [
+                    {"label": "⚡ Correr para a cesta", "custom_id": "fast_break_run", "success_rate": 0.7},
+                    {"label": "🎯 Passar para o ala", "custom_id": "fast_break_pass", "success_rate": 0.8},
+                    {"label": "🏃‍♂️ Drible e finalização", "custom_id": "fast_break_dribble", "success_rate": 0.6}
+                ]
+            },
+            {
+                "name": "🎯 Arremesso de 3 Pontos",
+                "description": "Chance de arremesso de longa distância!",
+                "options": [
+                    {"label": "🎯 Arremesso limpo", "custom_id": "three_clean", "success_rate": 0.4},
+                    {"label": "🏃‍♂️ Drible e arremesso", "custom_id": "three_dribble", "success_rate": 0.3},
+                    {"label": "🤝 Passar para melhor posição", "custom_id": "three_pass", "success_rate": 0.9}
+                ]
+            },
+            {
+                "name": "💪 Jogo Interior",
+                "description": "Chance de jogada próxima à cesta!",
+                "options": [
+                    {"label": "🏀 Hook shot", "custom_id": "inside_hook", "success_rate": 0.6},
+                    {"label": "💪 Post-up", "custom_id": "inside_post", "success_rate": 0.7},
+                    {"label": "🔄 Girar e finalizar", "custom_id": "inside_spin", "success_rate": 0.5}
+                ]
+            },
+            {
+                "name": "🛡️ Defesa",
+                "description": "O adversário está atacando!",
+                "options": [
+                    {"label": "🛡️ Bloqueio", "custom_id": "defense_block", "success_rate": 0.3},
+                    {"label": "🏃‍♂️ Roubar a bola", "custom_id": "defense_steal", "success_rate": 0.4},
+                    {"label": "📏 Forçar arremesso ruim", "custom_id": "defense_contest", "success_rate": 0.7}
+                ]
+            },
+            {
+                "name": "🎭 Jogada Especial",
+                "description": "Chance de uma jogada espetacular!",
+                "options": [
+                    {"label": "🔥 Alley-oop", "custom_id": "special_alley", "success_rate": 0.2},
+                    {"label": "💫 Crossover", "custom_id": "special_crossover", "success_rate": 0.4},
+                    {"label": "🚀 Tomahawk dunk", "custom_id": "special_tomahawk", "success_rate": 0.3}
+                ]
+            },
+            {
+                "name": "⏰ Final de Quarto",
+                "description": "Última chance do quarto!",
+                "options": [
+                    {"label": "🎯 Arremesso de 3", "custom_id": "quarter_three", "success_rate": 0.3},
+                    {"label": "🏃‍♂️ Penetração", "custom_id": "quarter_drive", "success_rate": 0.6},
+                    {"label": "🤝 Passar para finalização", "custom_id": "quarter_pass", "success_rate": 0.8}
+                ]
+            }
+        ]
     
     @app_commands.command(name="ranking", description="Mostra os rankings")
     @app_commands.describe(
@@ -215,10 +431,26 @@ class MatchesCog(commands.Cog):
         # Obtém rankings
         rankings = await self.db.get_rankings()
         
-        if not rankings or not rankings.get(categoria):
+        if not rankings:
             embed = EmbedBuilder.create_embed(
                 "📊 Ranking",
-                "Nenhum dado disponível para este ranking.",
+                "Nenhum dado disponível para rankings ainda.",
+                COLORS['info']
+            )
+            await interaction.followup.send(embed=embed)
+            return
+        
+        if not rankings.get(categoria) or len(rankings[categoria]) == 0:
+            if categoria == "overall":
+                message = "Nenhum time com 5 titulares ainda para calcular overall."
+            elif categoria == "money":
+                message = "Nenhum time criado ainda."
+            else:
+                message = "Nenhuma partida jogada ainda."
+            
+            embed = EmbedBuilder.create_embed(
+                "📊 Ranking",
+                message,
                 COLORS['info']
             )
             await interaction.followup.send(embed=embed)

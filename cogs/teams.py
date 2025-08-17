@@ -185,8 +185,7 @@ class TeamsCog(commands.Cog):
         await interaction.followup.send(embed=embed)
     
     @app_commands.command(name="titular", description="Define um jogador como titular")
-    @app_commands.describe(jogador="Nome do jogador para definir como titular")
-    async def set_starter(self, interaction: discord.Interaction, jogador: str):
+    async def set_starter(self, interaction: discord.Interaction):
         """Define um jogador como titular"""
         await interaction.response.defer()
         
@@ -203,58 +202,64 @@ class TeamsCog(commands.Cog):
             await interaction.followup.send(embed=embed)
             return
         
-        # Busca o jogador
+        # Obtém jogadores
         players = await self.db.get_user_players(user_id)
-        target_player = None
         
-        for player in players:
-            if jogador.lower() in player['name'].lower():
-                target_player = player
-                break
-        
-        if not target_player:
+        if not players:
             embed = EmbedBuilder.create_embed(
-                "❌ Jogador Não Encontrado",
-                f"Jogador '{jogador}' não encontrado no seu time.",
-                COLORS['error']
+                "📭 Sem Jogadores",
+                "Você não tem jogadores para definir como titular!",
+                COLORS['warning']
             )
             await interaction.followup.send(embed=embed)
             return
         
-        # Verifica se já é titular
-        if target_player['is_starter']:
+        # Filtra apenas reservas (não titulares)
+        bench_players = [p for p in players if not p['is_starter']]
+        
+        if not bench_players:
             embed = EmbedBuilder.create_embed(
-                "ℹ️ Já é Titular",
-                f"{target_player['name']} já é titular do seu time.",
+                "ℹ️ Todos Titulares",
+                "Todos os seus jogadores já são titulares!",
                 COLORS['info']
             )
             await interaction.followup.send(embed=embed)
             return
         
-        # Verifica se já tem 5 titulares
-        starters = [p for p in players if p['is_starter']]
-        if len(starters) >= 5:
-            embed = EmbedBuilder.create_embed(
-                "❌ Time Completo",
-                "Você já tem 5 titulares. Remova um titular primeiro.",
-                COLORS['error']
-            )
-            await interaction.followup.send(embed=embed)
-            return
-        
-        # Define como titular (implementar no database)
-        # Por enquanto, apenas confirma
+        # Cria embed com lista de jogadores
         embed = EmbedBuilder.create_embed(
-            "✅ Titular Definido",
-            f"{target_player['name']} agora é titular do seu time!",
-            COLORS['success']
+            "⭐ Definir Titular",
+            "Selecione um jogador para definir como titular:",
+            COLORS['primary']
         )
         
-        await interaction.followup.send(embed=embed)
+        # Cria menu suspenso com jogadores
+        options = []
+        for player in bench_players[:25]:  # Discord limita a 25 opções
+            rarity_emoji = {'comum': '⚪', 'raro': '🔵', 'épico': '🟣', 'lendário': '🟡'}
+            emoji = rarity_emoji.get(player['rarity'], '⚪')
+            options.append(discord.SelectOption(
+                label=f"{player['name']} ({player['overall']})",
+                value=str(player['id']),
+                description=f"{player['position']} - {player['team']}",
+                emoji=emoji
+            ))
+        
+        # Cria o menu suspenso
+        select = discord.ui.Select(
+            placeholder="Escolha um jogador...",
+            options=options,
+            custom_id="select_starter"
+        )
+        
+        # Cria a view
+        view = discord.ui.View()
+        view.add_item(select)
+        
+        await interaction.followup.send(embed=embed, view=view)
     
     @app_commands.command(name="reserva", description="Define um jogador como reserva")
-    @app_commands.describe(jogador="Nome do jogador para definir como reserva")
-    async def set_bench(self, interaction: discord.Interaction, jogador: str):
+    async def set_bench(self, interaction: discord.Interaction):
         """Define um jogador como reserva"""
         await interaction.response.defer()
         
@@ -271,47 +276,64 @@ class TeamsCog(commands.Cog):
             await interaction.followup.send(embed=embed)
             return
         
-        # Busca o jogador
+        # Obtém jogadores
         players = await self.db.get_user_players(user_id)
-        target_player = None
         
-        for player in players:
-            if jogador.lower() in player['name'].lower():
-                target_player = player
-                break
-        
-        if not target_player:
+        if not players:
             embed = EmbedBuilder.create_embed(
-                "❌ Jogador Não Encontrado",
-                f"Jogador '{jogador}' não encontrado no seu time.",
-                COLORS['error']
+                "📭 Sem Jogadores",
+                "Você não tem jogadores para definir como reserva!",
+                COLORS['warning']
             )
             await interaction.followup.send(embed=embed)
             return
         
-        # Verifica se já é reserva
-        if not target_player['is_starter']:
+        # Filtra apenas titulares
+        starter_players = [p for p in players if p['is_starter']]
+        
+        if not starter_players:
             embed = EmbedBuilder.create_embed(
-                "ℹ️ Já é Reserva",
-                f"{target_player['name']} já é reserva do seu time.",
+                "ℹ️ Sem Titulares",
+                "Você não tem jogadores titulares para definir como reserva!",
                 COLORS['info']
             )
             await interaction.followup.send(embed=embed)
             return
         
-        # Define como reserva (implementar no database)
-        # Por enquanto, apenas confirma
+        # Cria embed com lista de jogadores
         embed = EmbedBuilder.create_embed(
-            "✅ Reserva Definido",
-            f"{target_player['name']} agora é reserva do seu time!",
-            COLORS['success']
+            "🪑 Definir Reserva",
+            "Selecione um jogador para definir como reserva:",
+            COLORS['primary']
         )
         
-        await interaction.followup.send(embed=embed)
+        # Cria menu suspenso com jogadores
+        options = []
+        for player in starter_players[:25]:  # Discord limita a 25 opções
+            rarity_emoji = {'comum': '⚪', 'raro': '🔵', 'épico': '🟣', 'lendário': '🟡'}
+            emoji = rarity_emoji.get(player['rarity'], '⚪')
+            options.append(discord.SelectOption(
+                label=f"{player['name']} ({player['overall']})",
+                value=str(player['id']),
+                description=f"{player['position']} - {player['team']}",
+                emoji=emoji
+            ))
+        
+        # Cria o menu suspenso
+        select = discord.ui.Select(
+            placeholder="Escolha um jogador...",
+            options=options,
+            custom_id="select_bench"
+        )
+        
+        # Cria a view
+        view = discord.ui.View()
+        view.add_item(select)
+        
+        await interaction.followup.send(embed=embed, view=view)
     
     @app_commands.command(name="vender", description="Vende um jogador")
-    @app_commands.describe(jogador="Nome do jogador para vender")
-    async def sell_player(self, interaction: discord.Interaction, jogador: str):
+    async def sell_player(self, interaction: discord.Interaction):
         """Vende um jogador"""
         await interaction.response.defer()
         
@@ -328,50 +350,131 @@ class TeamsCog(commands.Cog):
             await interaction.followup.send(embed=embed)
             return
         
-        # Busca o jogador
+        # Obtém jogadores
         players = await self.db.get_user_players(user_id)
-        target_player = None
         
-        for player in players:
-            if jogador.lower() in player['name'].lower():
-                target_player = player
-                break
-        
-        if not target_player:
+        if not players:
             embed = EmbedBuilder.create_embed(
-                "❌ Jogador Não Encontrado",
-                f"Jogador '{jogador}' não encontrado no seu time.",
+                "📭 Sem Jogadores",
+                "Você não tem jogadores para vender!",
+                COLORS['warning']
+            )
+            await interaction.followup.send(embed=embed)
+            return
+        
+        # Cria embed com lista de jogadores
+        embed = EmbedBuilder.create_embed(
+            "💰 Vender Jogador",
+            "Selecione um jogador para vender:",
+            COLORS['warning']
+        )
+        
+        # Cria menu suspenso com jogadores
+        options = []
+        for player in players[:25]:  # Discord limita a 25 opções
+            rarity_emoji = {'comum': '⚪', 'raro': '🔵', 'épico': '🟣', 'lendário': '🟡'}
+            sell_value = int(player['market_value'] * 0.8)
+            emoji = rarity_emoji.get(player['rarity'], '⚪')
+            
+            options.append(discord.SelectOption(
+                label=f"{player['name']} (${sell_value:,})",
+                value=str(player['id']),
+                description=f"Overall: {player['overall']} | {player['position']} - {player['team']}",
+                emoji=emoji
+            ))
+        
+        # Cria o menu suspenso
+        select = discord.ui.Select(
+            placeholder="Escolha um jogador para vender...",
+            options=options,
+            custom_id="select_sell"
+        )
+        
+        # Cria a view
+        view = discord.ui.View()
+        view.add_item(select)
+        
+        await interaction.followup.send(embed=embed, view=view)
+
+    @app_commands.command(name="posicao", description="Define a posição de um jogador no time")
+    async def set_position(self, interaction: discord.Interaction):
+        """Define a posição de um jogador no time"""
+        await interaction.response.defer()
+        
+        user_id = interaction.user.id
+        
+        # Verifica se tem time
+        team = await self.db.get_team(user_id)
+        if not team:
+            embed = EmbedBuilder.create_embed(
+                "❌ Sem Time",
+                "Você ainda não criou um time!",
                 COLORS['error']
             )
             await interaction.followup.send(embed=embed)
             return
         
-        # Calcula valor de venda (80% do valor de mercado)
-        sell_value = int(target_player['market_value'] * 0.8)
+        # Obtém jogadores titulares
+        players = await self.db.get_user_players(user_id)
+        starter_players = [p for p in players if p['is_starter']]
         
-        # Confirma venda
+        if len(starter_players) < 5:
+            embed = EmbedBuilder.create_embed(
+                "⚠️ Time Incompleto",
+                f"Você precisa de 5 titulares para definir posições. Atualmente tem {len(starter_players)}.",
+                COLORS['warning']
+            )
+            await interaction.followup.send(embed=embed)
+            return
+        
+        # Cria embed com posições
         embed = EmbedBuilder.create_embed(
-            "💰 Confirmar Venda",
-            f"Você está vendendo **{target_player['name']}** por **${sell_value:,}**\n\n"
-            f"Overall: {target_player['overall']} | Time: {target_player['team']}\n"
-            f"Raridade: {target_player['rarity']} | Posição: {target_player['position']}",
-            COLORS['warning']
+            "🏀 Definir Posições",
+            "Selecione a posição para cada jogador:",
+            COLORS['primary']
         )
         
-        # Adiciona botões de confirmação
+        # Posições do basquete
+        positions = {
+            'PG': 'Point Guard (Armador)',
+            'SG': 'Shooting Guard (Ala-armador)', 
+            'SF': 'Small Forward (Ala)',
+            'PF': 'Power Forward (Ala-pivô)',
+            'C': 'Center (Pivô)'
+        }
+        
+        # Cria menus suspensos para cada posição
         view = discord.ui.View()
-        view.add_item(discord.ui.Button(
-            style=discord.ButtonStyle.green,
-            label="Confirmar Venda",
-            emoji=EMOJIS['money'],
-            custom_id=f"sell_confirm_{target_player['id']}"
-        ))
-        view.add_item(discord.ui.Button(
-            style=discord.ButtonStyle.red,
-            label="Cancelar",
-            emoji=EMOJIS['cross'],
-            custom_id="sell_cancel"
-        ))
+        
+        for pos, desc in positions.items():
+            # Filtra jogadores recomendados para cada posição
+            recommended_players = []
+            for player in starter_players:
+                if player['position'] == pos:
+                    recommended_players.append(player)
+            
+            # Cria opções para o menu
+            options = []
+            for player in starter_players:
+                is_recommended = player['position'] == pos
+                emoji = "⭐" if is_recommended else "⚪"
+                label = f"{player['name']} ({player['overall']})"
+                description = f"{player['position']} - {player['team']}"
+                
+                options.append(discord.SelectOption(
+                    label=label,
+                    value=f"{pos}_{player['id']}",
+                    description=description,
+                    emoji=emoji
+                ))
+            
+            # Cria o menu para esta posição
+            select = discord.ui.Select(
+                placeholder=f"Selecione {pos} ({desc})",
+                options=options,
+                custom_id=f"position_{pos}"
+            )
+            view.add_item(select)
         
         await interaction.followup.send(embed=embed, view=view)
 
